@@ -5,13 +5,16 @@ Kết hợp TẤT CẢ những gì đã học trong 1 project hoàn chỉnh.
 ## Checklist Deliverable
 
 - [x] Dockerfile (multi-stage, < 500 MB)
-- [x] docker-compose.yml (agent + redis)
+- [x] docker-compose.yml (nginx LB + agent + redis)
 - [x] .dockerignore
 - [x] Health check endpoint (`GET /health`)
 - [x] Readiness endpoint (`GET /ready`)
 - [x] API Key authentication
-- [x] Rate limiting
-- [x] Cost guard
+- [x] Rate limiting — 10 req/min **per user**
+- [x] Cost guard — $10/month **per user**
+- [x] Conversation history (`GET /history`)
+- [x] Stateless design — state in Redis (in-memory fallback)
+- [x] Load balancing — Nginx + scalable agent
 - [x] Config từ environment variables
 - [x] Structured logging
 - [x] Graceful shutdown
@@ -26,13 +29,16 @@ Kết hợp TẤT CẢ những gì đã học trong 1 project hoàn chỉnh.
 ├── app/
 │   ├── main.py         # Entry point — kết hợp tất cả
 │   ├── config.py       # 12-factor config
-│   ├── auth.py         # API Key + JWT
-│   ├── rate_limiter.py # Rate limiting
-│   └── cost_guard.py   # Budget protection
+│   ├── auth.py         # API Key auth + per-user id
+│   ├── rate_limiter.py # Per-user rate limiting (Redis + fallback)
+│   ├── cost_guard.py   # Per-user monthly budget (Redis + fallback)
+│   ├── history.py      # Conversation history (Redis + fallback)
+│   └── store.py        # Redis client + in-memory fallback switch
 ├── Dockerfile          # Multi-stage, production-ready
-├── docker-compose.yml  # Full stack
+├── docker-compose.yml  # Full stack (nginx + agent + redis)
+├── nginx.conf          # Load balancer config
 ├── railway.toml        # Deploy Railway
-├── render.yaml         # Deploy Render
+├── render.yaml         # Deploy Render (web + managed redis)
 ├── .env.example        # Template
 ├── .dockerignore
 └── requirements.txt
@@ -58,6 +64,20 @@ curl -H "X-API-Key: $API_KEY" \
      -X POST http://localhost/ask \
      -H "Content-Type: application/json" \
      -d '{"question": "What is deployment?"}'
+
+# 5. Conversation history (per user)
+curl -H "X-API-Key: $API_KEY" http://localhost/history
+```
+
+### Scale out (stateless + load balanced)
+
+```bash
+# Run 3 agent replicas behind Nginx
+docker compose up --scale agent=3
+
+# All requests share rate limits / budget / history via Redis —
+# any replica can serve any request.
+docker compose logs agent | grep agent_call   # see traffic spread across replicas
 ```
 
 ---

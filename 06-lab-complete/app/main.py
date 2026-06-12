@@ -27,9 +27,16 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from app.config import settings
-from app.auth import verify_api_key
+from app.auth import verify_api_key, current_user
 from app.rate_limiter import check_rate_limit
-from app.cost_guard import check_and_record_cost, get_daily_cost
+from app.cost_guard import (
+    estimate_cost,
+    check_budget,
+    record_cost,
+    get_user_cost,
+)
+from app import history
+from app.store import redis_healthy, backend_name
 
 # Mock LLM (thay bằng OpenAI/Anthropic khi có API key)
 from utils.mock_llm import ask as llm_ask
@@ -124,6 +131,12 @@ class AskResponse(BaseModel):
     answer: str
     model: str
     timestamp: str
+    history_len: int
+
+
+class HistoryResponse(BaseModel):
+    turns: list[dict]
+    count: int
 
 # ─────────────────────────────────────────────────────────
 # Endpoints
@@ -137,6 +150,7 @@ def root():
         "environment": settings.environment,
         "endpoints": {
             "ask": "POST /ask (requires X-API-Key)",
+            "history": "GET /history (requires X-API-Key)",
             "health": "GET /health",
             "ready": "GET /ready",
         },
@@ -147,44 +161,60 @@ def root():
 async def ask_agent(
     body: AskRequest,
     request: Request,
-    _key: str = Depends(verify_api_key),
+    user_id: str = Depends(current_user),
 ):
     """
     Send a question to the AI agent.
 
     **Authentication:** Include header `X-API-Key: <your-key>`
-    """
-    # Rate limit per API key
-    check_rate_limit(_key[:8])  # use first 8 chars as key bucket
 
-    # Budget check
+    Per-user rate limiting, monthly cost guard and conversation history apply.
+    """
+    # Rate limit per user
+    check_rate_limit(user_id)
+
+    # Budget check (estimate input cost before doing work)
     input_tokens = len(body.question.split()) * 2
-    check_and_record_cost(input_tokens, 0)
+    check_budget(user_id, estimate_cost(input_tokens, 0))
 
     logger.info(json.dumps({
         "event": "agent_call",
+        "user": user_id,
         "q_len": len(body.question),
         "client": str(request.client.host) if request.client else "unknown",
     }))
 
     answer = llm_ask(body.question)
 
+    # Record real cost and persist the turn
     output_tokens = len(answer.split()) * 2
-    check_and_record_cost(0, output_tokens)
+    record_cost(user_id, estimate_cost(input_tokens, output_tokens))
+    history.add_turn(user_id, body.question, answer)
 
     return AskResponse(
         question=body.question,
         answer=answer,
         model=settings.llm_model,
         timestamp=datetime.now(timezone.utc).isoformat(),
+        history_len=len(history.get_history(user_id)),
     )
+
+
+@app.get("/history", response_model=HistoryResponse, tags=["Agent"])
+def get_user_history(user_id: str = Depends(current_user)):
+    """Return the authenticated user's recent conversation turns."""
+    turns = history.get_history(user_id)
+    return HistoryResponse(turns=turns, count=len(turns))
 
 
 @app.get("/health", tags=["Operations"])
 def health():
     """Liveness probe. Platform restarts container if this fails."""
     status = "ok"
-    checks = {"llm": "mock" if not settings.openai_api_key else "openai"}
+    checks = {
+        "llm": "mock" if not settings.openai_api_key else "openai",
+        "state_backend": backend_name(),
+    }
     return {
         "status": status,
         "version": settings.app_version,
@@ -201,20 +231,23 @@ def ready():
     """Readiness probe. Load balancer stops routing here if not ready."""
     if not _is_ready:
         raise HTTPException(503, "Not ready")
-    return {"ready": True}
+    # If Redis is configured but down, we degrade to in-memory rather than fail
+    # readiness — the app still serves requests, just not horizontally scalable.
+    return {"ready": True, "state_backend": backend_name(), "redis_ok": redis_healthy()}
 
 
 @app.get("/metrics", tags=["Operations"])
-def metrics(_key: str = Depends(verify_api_key)):
-    """Basic metrics (protected)."""
-    daily_cost = get_daily_cost()
+def metrics(user_id: str = Depends(current_user)):
+    """Per-user metrics (protected). Cost is the caller's month-to-date spend."""
+    user_cost = get_user_cost(user_id)
     return {
         "uptime_seconds": round(time.time() - START_TIME, 1),
         "total_requests": _request_count,
         "error_count": _error_count,
-        "daily_cost_usd": round(daily_cost, 4),
-        "daily_budget_usd": settings.daily_budget_usd,
-        "budget_used_pct": round(daily_cost / settings.daily_budget_usd * 100, 1),
+        "state_backend": backend_name(),
+        "user_month_cost_usd": round(user_cost, 4),
+        "monthly_budget_usd": settings.monthly_budget_usd,
+        "budget_used_pct": round(user_cost / settings.monthly_budget_usd * 100, 1),
     }
 
 

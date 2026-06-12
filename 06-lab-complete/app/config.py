@@ -27,14 +27,19 @@ class Settings:
         default_factory=lambda: os.getenv("ALLOWED_ORIGINS", "*").split(",")
     )
 
-    # Rate limiting
+    # Rate limiting — per user
     rate_limit_per_minute: int = field(
-        default_factory=lambda: int(os.getenv("RATE_LIMIT_PER_MINUTE", "20"))
+        default_factory=lambda: int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
     )
 
-    # Budget
-    daily_budget_usd: float = field(
-        default_factory=lambda: float(os.getenv("DAILY_BUDGET_USD", "5.0"))
+    # Budget — per user, per calendar month
+    monthly_budget_usd: float = field(
+        default_factory=lambda: float(os.getenv("MONTHLY_BUDGET_USD", "10.0"))
+    )
+
+    # Conversation history — max turns kept per user
+    max_history_turns: int = field(
+        default_factory=lambda: int(os.getenv("MAX_HISTORY_TURNS", "20"))
     )
 
     # Storage

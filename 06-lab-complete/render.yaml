@@ -17,7 +17,22 @@ services:
         generateValue: true
       - key: JWT_SECRET
         generateValue: true
-      - key: DAILY_BUDGET_USD
-        value: "5.0"
+      - key: MONTHLY_BUDGET_USD
+        value: "10.0"
       - key: RATE_LIMIT_PER_MINUTE
-        value: "20"
+        value: "10"
+      # Shared state backend (rate limits / budgets / history) for stateless scaling.
+      # If this Redis is removed, the app transparently falls back to in-memory.
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: agent-redis
+          property: connectionString
+
+  # Managed Redis for stateless, horizontally-scalable state.
+  - type: redis
+    name: agent-redis
+    region: singapore
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []   # only reachable from services in this Render account

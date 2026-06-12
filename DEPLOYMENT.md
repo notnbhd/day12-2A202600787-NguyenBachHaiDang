@@ -18,14 +18,11 @@ Root directory: `06-lab-complete/`
 ### 1. Health Check (no auth)
 ```bash
 curl https://day12-2a202600787-nguyenbachhaidang.onrender.com/health
-# Expected 200:
-# {"status":"ok","version":"1.0.0","environment":"production", ...}
 ```
 
 ### 2. Readiness probe
 ```bash
 curl https://day12-2a202600787-nguyenbachhaidang.onrender.com/ready
-# Expected 200: {"ready": true}
 ```
 
 ### 3. Auth required (no key → 401)
@@ -39,9 +36,9 @@ curl -i -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
 ### 4. API test (with key → 200)
 ```bash
 curl -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
-  -H "X-API-Key: ed6e4fe2b7b39538f41590a8ff4d6ae4" \
+  -H "X-API-Key: <YOUR_AGENT_API_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"question":"What is deployment?"}'
+  -d '{"question":"What is love?"}'
 # Expected 200: {"question":"...","answer":"...","model":"gpt-4o-mini","timestamp":"..."}
 ```
 
@@ -50,11 +47,10 @@ curl -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
 for i in $(seq 1 25); do
   curl -s -o /dev/null -w "%{http_code}\n" \
     -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
-    -H "X-API-Key: ed6e4fe2b7b39538f41590a8ff4d6ae4" \
+    -H "X-API-Key: <YOUR_AGENT_API_KEY>" \
     -H "Content-Type: application/json" \
     -d '{"question":"test"}'
 done
-# Expected: 200 ... then 429 after the per-minute limit (default 20/min)
 ```
 
 ## Environment Variables Set on Render
@@ -65,12 +61,12 @@ done
 | `APP_VERSION` | `1.0.0` | |
 | `AGENT_API_KEY` | *(generated / secret)* | Required — used in `X-API-Key` header |
 | `JWT_SECRET` | *(generated / secret)* | Required in production |
-| `RATE_LIMIT_PER_MINUTE` | `20` | |
-| `DAILY_BUDGET_USD` | `5.0` | Cost guard |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Per user |
+| `MONTHLY_BUDGET_USD` | `10.0` | Cost guard — per user, per calendar month |
+| `REDIS_URL` | *(from `agent-redis`)* | Shared state for stateless scaling; falls back to in-memory if absent |
 | `OPENAI_API_KEY` | *(empty)* | Empty → uses mock LLM (no real cost) |
 | `PORT` | `8000` | Match the port the container listens on |
 
-> Copy your real `AGENT_API_KEY` from Render → Service → Environment.
 
 ## Screenshots
 

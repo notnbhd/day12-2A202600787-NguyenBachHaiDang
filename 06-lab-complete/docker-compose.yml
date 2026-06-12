@@ -1,10 +1,11 @@
 version: "3.9"
 
 services:
+  # Stateless agent — scale freely: `docker compose up --scale agent=3`
   agent:
     build: .
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       - ENVIRONMENT=staging
       - APP_NAME=Production AI Agent
@@ -23,11 +24,28 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # Nginx load balancer — single public entrypoint, round-robins across agents
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - agent
+    restart: unless-stopped
+
+  # Shared state: rate-limit windows, monthly budgets, conversation history
   redis:
     image: redis:7-alpine
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
+
+volumes:
+  redis-data:
