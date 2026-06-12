@@ -5,7 +5,7 @@
 ## Public URL
 
 ```
-https://<your-service>.onrender.com      ← FILL IN after deploy
+https://day12-2a202600787-nguyenbachhaidang.onrender.com
 ```
 
 ## Platform
@@ -17,20 +17,20 @@ Root directory: `06-lab-complete/`
 
 ### 1. Health Check (no auth)
 ```bash
-curl https://<your-service>.onrender.com/health
+curl https://day12-2a202600787-nguyenbachhaidang.onrender.com/health
 # Expected 200:
 # {"status":"ok","version":"1.0.0","environment":"production", ...}
 ```
 
 ### 2. Readiness probe
 ```bash
-curl https://<your-service>.onrender.com/ready
+curl https://day12-2a202600787-nguyenbachhaidang.onrender.com/ready
 # Expected 200: {"ready": true}
 ```
 
 ### 3. Auth required (no key → 401)
 ```bash
-curl -i -X POST https://<your-service>.onrender.com/ask \
+curl -i -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"Hello"}'
 # Expected: HTTP/1.1 401 Unauthorized
@@ -38,8 +38,8 @@ curl -i -X POST https://<your-service>.onrender.com/ask \
 
 ### 4. API test (with key → 200)
 ```bash
-curl -X POST https://<your-service>.onrender.com/ask \
-  -H "X-API-Key: YOUR_AGENT_API_KEY" \
+curl -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
+  -H "X-API-Key: ed6e4fe2b7b39538f41590a8ff4d6ae4" \
   -H "Content-Type: application/json" \
   -d '{"question":"What is deployment?"}'
 # Expected 200: {"question":"...","answer":"...","model":"gpt-4o-mini","timestamp":"..."}
@@ -49,8 +49,8 @@ curl -X POST https://<your-service>.onrender.com/ask \
 ```bash
 for i in $(seq 1 25); do
   curl -s -o /dev/null -w "%{http_code}\n" \
-    -X POST https://<your-service>.onrender.com/ask \
-    -H "X-API-Key: YOUR_AGENT_API_KEY" \
+    -X POST https://day12-2a202600787-nguyenbachhaidang.onrender.com/ask \
+    -H "X-API-Key: ed6e4fe2b7b39538f41590a8ff4d6ae4" \
     -H "Content-Type: application/json" \
     -d '{"question":"test"}'
 done
